@@ -62,6 +62,12 @@
   {{> renderForm required=true}}
   {{/with}}
 </array-input>
+{{else if (eq type "set")}}
+<set-input {{#if arg}}arg="{{arg}}" :value="value.{{arg}}"{{else}}:arg="arg" :value="value"{{/if}} :required="{{required}}" @update="update" v-slot="{ arg, value, update }">
+  {{#with items}}
+  {{> renderForm required=true}}
+  {{/with}}
+</set-input>
 {{else if (eq type "optional")}}
 {{#with item}}
 {{> renderForm arg=../arg required=false}}
@@ -98,6 +104,14 @@
   {{/with}}
 </array-display>
 ],
+{{else if (eq type "set")}}
+{
+<set-display class="set-display" {{#if arg}}:value="value.{{arg}}"{{else}}:value="value"{{/if}} v-slot="{ value }">
+  {{#with items}}
+    {{> renderState}}
+  {{/with}}
+</set-display>
+},
 {{else if (eq type "optional")}}
 {{#with item}}
 {{> renderState arg=../arg}}

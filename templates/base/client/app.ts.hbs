@@ -57,7 +57,7 @@ Vue.component("method-form", {
     },
     async submit() {
       if (!this.valid) {
-        this.$toasted.error("Required fields missing");
+        this.$toasted.error("Invalid fields");
         return;
       }
       const client: RtagClient = this.$parent.$data.client;
@@ -164,6 +164,53 @@ Vue.component("array-input", {
   },
 });
 
+Vue.component("set-input", {
+  props: { arg: String, required: Boolean, value: { type: Array, default: () => [] } },
+  data: () => ({ invalidArgs: new Set<string>() }),
+  template: `<div>
+  <div>
+    <div class="form-group array-item" v-for="(v, i) in value">
+      <div class="stretch-form-input">
+        <slot :arg="i.toString()" :value="v" :update="update"></slot>
+      </div>
+      <button class="button danger" type="button" @click="deleteItem(i)">x</button>
+    </div>
+  </div>
+  <button class="button" type="button" @click="addItem()">
+    <span class="button-text">Add</span>
+  </button>
+</div>`,
+  created() {
+    this.$emit("update", this.arg, this.value, !this.required);
+  },
+  methods: {
+    update(arg: string, value: any, valid: boolean) {
+      this.invalidArgs[valid ? "delete" : "add"](arg);
+      const valueSet = new Set(this.value.map((val) => JSON.stringify(val)));
+      this.$emit(
+        "update",
+        this.arg,
+        { [Number(arg)]: value },
+        this.invalidArgs.size === 0 && valueSet.size === this.value.length && !valueSet.has(JSON.stringify(value))
+      );
+    },
+    addItem() {
+      this.$emit("update", this.arg, { [this.value.length]: undefined }, false);
+    },
+    deleteItem(i: number) {
+      this.invalidArgs.delete(i.toString());
+      const valueList = this.value.filter((_, idx) => idx !== i);
+      const valueSet = new Set(valueList.map((val) => JSON.stringify(val)));
+      this.$emit(
+        "update",
+        this.arg,
+        { [i]: DELETED },
+        this.invalidArgs.size === 0 && (!this.required || valueList.length > 0) && valueSet.size === valueList.length
+      );
+    },
+  },
+});
+
 Vue.component("enum-input", {
   props: {
     arg: String,
@@ -246,6 +293,21 @@ Vue.component("object-display", {
 });
 
 Vue.component("array-display", {
+  props: { value: Array },
+  data: () => ({ isOpen: true }),
+  template: `<span v-if="value !== null && value !== undefined && value.length > 0">
+      <button class="button small" type="button" v-on:click="isOpen=!isOpen">
+        <span class="button-text" v-if="isOpen">-</span>
+        <span class="button-text" v-else>+</span>
+      </button>
+      <span v-if="!isOpen">...</span>
+      <div v-else v-for="v in value">
+        <slot :value="v"></slot>
+      </div>
+    </span>`,
+});
+
+Vue.component("set-display", {
   props: { value: Array },
   data: () => ({ isOpen: true }),
   template: `<span v-if="value !== null && value !== undefined && value.length > 0">

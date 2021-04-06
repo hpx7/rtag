@@ -61,6 +61,8 @@ export const Result: { success: () => SuccessResult; error: (error: {{error}}) =
 {{> renderArg item}} | undefined
 {{~else if (eq type "array")}}
 {{> renderArg items}}[]
+{{~else if (eq type "set")}}
+{{> renderArg items}}[]
 {{~else if (eq type "number")}}
 number
 {{~else if (eq type "string")}}

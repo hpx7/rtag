@@ -24,7 +24,16 @@ const RtagConfig = z
   })
   .strict();
 
-type Arg = ObjectArg | ArrayArg | OptionalArg | DisplayPluginArg | EnumArg | StringArg | NumberArg | BooleanArg;
+type Arg =
+  | ObjectArg
+  | ArrayArg
+  | SetArg
+  | OptionalArg
+  | DisplayPluginArg
+  | EnumArg
+  | StringArg
+  | NumberArg
+  | BooleanArg;
 interface ObjectArg {
   type: "object";
   alias: boolean;
@@ -33,6 +42,12 @@ interface ObjectArg {
 }
 interface ArrayArg {
   type: "array";
+  alias: boolean;
+  typeString?: string;
+  items: Arg;
+}
+interface SetArg {
+  type: "set";
   alias: boolean;
   typeString?: string;
   items: Arg;
@@ -148,6 +163,13 @@ function generate() {
       } else if (args.endsWith("[]")) {
         return {
           type: "array",
+          typeString: typeString ?? args,
+          alias,
+          items: getArgsInfo(args.substring(0, args.length - 2), true, false),
+        };
+      } else if (args.endsWith("{}")) {
+        return {
+          type: "set",
           typeString: typeString ?? args,
           alias,
           items: getArgsInfo(args.substring(0, args.length - 2), true, false),
