@@ -5,6 +5,17 @@ export enum {{@key}} {
   {{label}},
   {{/each}}
 }
+{{else if (eq type "union")}}
+export type {{@key}} =
+{{#each options}}
+  | ({type: "{{> renderArg}}"} & {{> renderArg}})
+{{/each}}
+export const {{@key}} = {
+{{#each options}}
+  is{{> renderArg}}: ({{@../key}}: {{@../key}}): {{@../key}} is ({type: "{{> renderArg}}"} & {{> renderArg}}) => {{@../key}}.type === "{{> renderArg}}",
+  {{> renderArg}}: (val: {{> renderArg}}): {{@../key}} => ({...val, type: "{{> renderArg}}"}),
+{{/each}}
+}
 {{else if (eq type "object")}}
 export interface {{@key}} {
   {{#each properties}}

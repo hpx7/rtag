@@ -69,6 +69,14 @@
 {{#with item}}
 {{> renderForm arg=../arg required=false}}
 {{/with}}
+{{else if (eq type "union")}}
+<union-input {{#if arg}}arg="{{arg}}" :value="value.{{arg}}"{{else}}:arg="arg" :value="value"{{/if}} :required="{{required}}" @update="update" union="{{typeString}}">
+  {{#each options}}
+  <template #{{@key}}="{ arg, value, update }">
+    {{> renderForm required=true}}
+  </template>
+  {{/each}}
+</union-input>
 {{else if (eq type "enum")}}
 <enum-input {{#if arg}}arg="{{arg}}" :value="value.{{arg}}"{{else}}:arg="arg" :value="value"{{/if}} :required="{{required}}" @update="update" enum="{{typeString}}"></enum-input>
 {{else if (eq type "string")}}

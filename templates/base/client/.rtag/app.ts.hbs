@@ -164,6 +164,38 @@ Vue.component("array-input", {
   },
 });
 
+Vue.component("union-input", {
+  props: {
+    arg: String,
+    required: Boolean,
+    value: { type: Object, default: () => ({}) },
+    union: String,
+  },
+  template: `<div class="union-input">
+      <div class="vue-select">
+        <v-select :value="value.type" :options="options" @input="updateType"></v-select>
+      </div>
+      <slot :name="value.type" :value="value" :update="update" :arg="value.type"></slot>
+    </div>`,
+  created() {
+    this.$emit("update", this.arg, this.value, !this.required);
+  },
+  methods: {
+    update(arg: string, value: any, valid: boolean) {
+      this.$emit("update", this.arg, value, valid);
+    },
+    updateType(value: string | null) {
+      const val = value === null ? undefined : { type: value };
+      this.$emit("update", this.arg, val, !this.required || val !== undefined);
+    },
+  },
+  computed: {
+    options() {
+      return Object.keys(Types[this.union as keyof typeof Types]).filter((x) => !x.startsWith("is"));
+    },
+  },
+});
+
 Vue.component("enum-input", {
   props: {
     arg: String,
