@@ -1,0 +1,200 @@
+package rtag;
+
+import java.util.List;
+import java.util.Optional;
+
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.annotation.JsonValue;
+
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.NonNull;
+import lombok.Value;
+import lombok.extern.jackson.Jacksonized;
+
+public class Types {
+{{#each types}}
+{{#if (eq type "enum")}}
+
+    public enum {{@key}} {
+        {{#each options}}{{label}}{{#unless @last}}, {{else}};{{/unless}}{{/each}}
+
+        @JsonValue
+        public int toValue() {
+            return ordinal();
+        }
+    }
+{{else if (eq type "object")}}
+
+    @Value
+    @Builder
+    @Jacksonized
+    @JsonInclude(JsonInclude.Include.NON_ABSENT)
+    public static class {{@key}} {
+        {{#each properties}}
+        @JsonProperty("{{@key}}")
+        private {{> renderArg}} {{@key}};
+        {{/each}}
+    }
+{{else}}
+
+    @EqualsAndHashCode
+    public static final class {{@key}} {
+        private final {{> renderArg}} value;
+
+        private {{@key}}(@NonNull {{> renderArg}} value) {
+            this.value = value;
+        }
+
+        @JsonValue
+        public {{> renderArg}} get() {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return value.toString();
+        }
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public static {{@key}} of(@NonNull {{> renderArg}} value) {
+            return new {{@key}}(value);
+        }
+    }
+{{/if}}
+{{/each}}
+{{#each methods}}
+
+    @Value
+    @Builder
+    @Jacksonized
+    @JsonInclude(JsonInclude.Include.NON_ABSENT)
+    public static class {{makeRequestName @key}} {
+        {{#each properties}}
+        private {{> renderArg}} {{@key}};
+        {{/each}}
+    }
+{{/each}}
+
+    @Value
+    @Builder
+    @Jacksonized
+    public static class UserData {
+        private Base value;
+
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        private UserData(Base value) {
+            this.value = value;
+        }
+
+        @JsonValue
+        private Base get() {
+            return value;
+        }
+
+        @Override
+        public String toString() {
+            return value.toString();
+        }
+
+        @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
+        @JsonSubTypes({ @JsonSubTypes.Type(AnonymousUserData.class), @JsonSubTypes.Type(GoogleUserData.class), })
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public interface Base {
+            <T> T accept(Visitor<T> visitor);
+        }
+
+        public interface Visitor<T> {
+            {{#each auth}}
+
+            T visit{{capitalize @key}}({{capitalize @key}} value);
+            {{/each}}    
+        }
+        {{#each auth}}
+
+        @Value
+        @Builder
+        @Jacksonized
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class {{capitalize @key}} {
+            private String type;
+            private String id;
+{{#if (eq @key "anonymous")}}
+            private String name;
+{{else if (eq @key "google")}}
+            private String name;
+            private String email;
+            private String locale;
+            private String picture;
+{{/if}}
+        }
+
+        @JsonTypeName("{{@key}}")
+        private static class {{capitalize @key}}UserData implements Base {
+            private {{capitalize @key}} value;
+
+            @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+            private {{capitalize @key}}UserData({{capitalize @key}} value) {
+                this.value = value;
+            }
+
+            @JsonProperty(value = "type", index = 0)
+            private String getType() {
+                return "{{@key}}";
+            }
+
+            @JsonProperty("{{@key}}")
+            private {{capitalize @key}} get() {
+                return value;
+            }
+
+            @Override
+            public String toString() {
+                return value.toString();
+            }
+
+            @Override
+            public <T> T accept(Visitor<T> visitor) {
+                return visitor.visit{{capitalize @key}}(value);
+            }
+        }
+        {{/each}}
+    }
+
+    @Value
+    @Builder
+    @Jacksonized
+    public static class Result {
+        public enum ResultType {
+            @JsonProperty("success")
+            SUCCESS, @JsonProperty("error")
+            ERROR;
+        }
+
+        private ResultType type;
+        private {{> renderArg error}} error;
+    }
+}
+{{#*inline "renderArg"}}
+{{#if alias}}
+{{typeString}}
+{{~else if (eq type "optional")}}
+Optional<{{> renderArg item}}>
+{{~else if (eq type "array")}}
+List<{{> renderArg items}}>
+{{~else if (eq type "number")}}
+Integer
+{{~else if (eq type "string")}}
+String
+{{~else if (eq type "boolean")}}
+Boolean
+{{~else if (eq type "plugin")}}
+{{> renderArg item}}
+{{~/if}}
+{{~/inline}}

@@ -1,0 +1,234 @@
+package rtag;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
+import java.util.function.Consumer;
+
+import com.auth0.jwt.JWT;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.squareup.okhttp.MediaType;
+import com.squareup.okhttp.OkHttpClient;
+import com.squareup.okhttp.Request;
+import com.squareup.okhttp.RequestBody;
+
+import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.handshake.ServerHandshake;
+import org.msgpack.jackson.dataformat.MessagePackFactory;
+
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.Value;
+{{#each methods}}
+import rtag.Types.{{makeRequestName @key}};
+{{/each}}
+import rtag.Types.{{userState}};
+import rtag.Types.Result;
+import rtag.Types.UserData;
+
+public class RtagClient {
+
+    private static final ExecutorService ES = Executors.newSingleThreadExecutor();
+    private static final OkHttpClient CLIENT = new OkHttpClient();
+    private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper().registerModule(new Jdk8Module());
+    private static final ObjectMapper MSGPACK_MAPPER = new ObjectMapper(new MessagePackFactory())
+            .registerModule(new Jdk8Module());
+
+    private final Map<String, ResultCallback> callbacks = new HashMap<>();
+    private final Random rng = new Random();
+
+    @Setter
+    private WebSocketClient socket;
+
+    private RtagClient() {
+    }
+
+    public static UserData getUserFromToken(String token) throws IOException {
+        byte[] data = Base64.getDecoder().decode(JWT.decode(token).getPayload());
+        return UserData.builder().value(JSON_MAPPER.readValue(data, UserData.Base.class)).build();
+    }
+{{#each auth}}
+{{#if (eq @key "anonymous")}}
+
+    public static String loginAnonymous(String origin) throws IOException {
+        return httpPost(String.format("%s/login/anonymous", origin), "{}", LoginResponse.class).getToken();
+    }
+{{else if (eq @key "google")}}
+
+    public static String loginGoogle(String idToken, String origin) throws IOException {
+        return httpPost(String.format("%s/login/google", origin), String.format("{ idToken: %s }", idToken),
+                LoginResponse.class).getToken();
+    }
+{{/if}}
+{{/each}}
+
+    public static String createState(String origin, String token, {{makeRequestName initialize}} request) throws IOException {
+        return httpPost(String.format("%s/new", origin), JSON_MAPPER.writeValueAsString(request), token,
+                CreateStateResponse.class).getStateId();
+    }
+
+    public static RtagClient connect(String host, String token, String stateId, Consumer<{{userState}}> onStateChange)
+            throws URISyntaxException, InterruptedException {
+        RtagClient client = new RtagClient();
+        WebSocketClient socket = new WebSocketClient(new URI(String.format("ws://%s/%s", host, stateId))) {
+
+            @Override
+            public void onOpen(ServerHandshake handshakedata) {
+                this.send(token);
+            }
+
+            @Override
+            public void onMessage(String message) throws IllegalArgumentException {
+                throw new IllegalArgumentException(
+                        "String messages are not allowed. Message must be of type ByteBuffer");
+            }
+
+            @Override
+            public void onMessage(ByteBuffer message) {
+                try {
+                    byte[] data = message.array();
+                    Message msg = MSGPACK_MAPPER.readValue(data, Message.class);
+                    if (msg.getType().equals("response")) {
+                        ResponseMessage responseMsg = MSGPACK_MAPPER.readValue(data, ResponseMessage.class);
+                        ResultCallback resultCallback = client.callbacks.get(responseMsg.getMsgId());
+                        resultCallback.getCb().setResult(responseMsg.getResult());
+                        ES.execute(resultCallback.getFuture());
+                        client.callbacks.remove(responseMsg.getMsgId());
+                    } else if (msg.getType().equals("state")) {
+                        StateMessage stateMsg = MSGPACK_MAPPER.readValue(data, StateMessage.class);
+                        onStateChange.accept(stateMsg.getState());
+                    } else {
+                        throw new Exception(String.format("Unknown message type: %s", msg.getType()));
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            @Override
+            public void onClose(int code, String reason, boolean remote) {
+                System.out.println("connection closed");
+            }
+
+            @Override
+            public void onError(Exception ex) {
+                ex.printStackTrace();
+            }
+
+        };
+        socket.connectBlocking();
+        client.setSocket(socket);
+        return client;
+    }
+    {{#each methods}}
+    {{#if (ne @key ../initialize)}}
+
+    public Result {{@key}}({{makeRequestName @key}} request)
+            throws InterruptedException, ExecutionException, JsonProcessingException {
+        String msgId = Integer.toString(rng.nextInt(Integer.MAX_VALUE), 36);
+        ResultCallback.ResultCallable cb = new ResultCallback.ResultCallable();
+        FutureTask<Result> future = new FutureTask<>(cb);
+        this.callbacks.put(msgId, ResultCallback.builder().future(future).cb(cb).build());
+        ObjectNode obj = MSGPACK_MAPPER.createObjectNode();
+        obj.put("method", "{{@key}}");
+        obj.put("msgId", msgId);
+        obj.set("args", MSGPACK_MAPPER.convertValue(request, JsonNode.class));
+        this.socket.send(MSGPACK_MAPPER.writeValueAsBytes(obj));
+        return this.callbacks.get(msgId).get();
+    }
+    {{/if}}
+    {{/each}}
+
+    public void disconnect() throws InterruptedException {
+        this.socket.closeBlocking();
+        ES.shutdown();
+    }
+
+    private static <T> T httpPost(String url, String body, Class<T> responseType) throws IOException {
+        Request request = new Request.Builder().url(url).post(RequestBody.create(JSON, body)).build();
+        return makeCall(request, responseType);
+    }
+
+    private static <T> T httpPost(String url, String body, String token, Class<T> responseType) throws IOException {
+        Request request = new Request.Builder().url(url).post(RequestBody.create(JSON, body))
+                .header("Authorization", "Bearer " + token).build();
+        return makeCall(request, responseType);
+    }
+
+    private static <T> T makeCall(Request request, Class<T> responseType) throws IOException {
+        String response = CLIENT.newCall(request).execute().body().string();
+        return JSON_MAPPER.readValue(response, responseType);
+    }
+
+    @Value
+    @Builder
+    private static class ResultCallback {
+        private FutureTask<Result> future;
+        private ResultCallable cb;
+
+        @Getter
+        @Setter
+        public static class ResultCallable implements Callable<Result> {
+            private Result result;
+
+            public Result call() {
+                return this.result;
+            }
+        }
+
+        public Result get() throws InterruptedException, ExecutionException {
+            return this.future.get();
+        }
+    }
+
+    @Getter
+    @Setter
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static class Message {
+        private String type;
+    }
+
+    @Getter
+    @Setter
+    private static class ResponseMessage extends Message {
+        private String type;
+        private String msgId;
+        private Result result;
+    }
+
+    @Getter
+    @Setter
+    private static class StateMessage extends Message {
+        private String type;
+        private {{userState}} state;
+    }
+
+    @Getter
+    @Setter
+    private static class LoginResponse {
+        private String token;
+    }
+
+    @Getter
+    @Setter
+    private static class CreateStateResponse {
+        private String stateId;
+    }
+}

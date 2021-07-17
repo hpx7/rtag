@@ -1,0 +1,24 @@
+apply plugin: "java"
+
+repositories { 
+    mavenCentral() 
+}
+
+jar {
+    archiveBaseName = "gs-gradle"
+    archiveVersion =  "0.1.0"
+}
+
+sourceCompatibility = 1.15
+targetCompatibility = 1.15
+
+dependencies {
+    implementation group: "com.fasterxml.jackson.core", name: "jackson-databind", version: "2.11.2"
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.12.3"
+    compileOnly "org.projectlombok:lombok:1.18.18"
+    annotationProcessor "org.projectlombok:lombok:1.18.18"
+    implementation "org.msgpack:jackson-dataformat-msgpack:0.8.22"
+    implementation "com.squareup.okhttp:okhttp:2.5.0"
+    implementation "org.java-websocket:Java-WebSocket:1.5.1"
+    implementation "com.auth0:java-jwt:3.14.0"
+}
