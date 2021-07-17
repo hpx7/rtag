@@ -1,0 +1,11 @@
+{
+  "name": "set-client",
+  "version": "0.0.1",
+  "type": "module",
+  "dependencies": {
+    "lit-element": "^2.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^4.1.3"
+  }
+}
