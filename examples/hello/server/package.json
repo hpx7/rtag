@@ -1,0 +1,11 @@
+{
+    "name": "hello-server",
+    "version": "0.0.1",
+    "type": "module",
+    "devDependencies": {
+        "ts-node": "^9.1.1"
+    },
+    "scripts": {
+        "postinstall": "cd .rtag && npm install"
+    }
+}

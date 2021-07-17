@@ -1,0 +1,16 @@
+types:
+  PlayerState:
+    text: string
+
+methods:
+  createGame:
+  updateName:
+    name: string
+
+userState: PlayerState
+initialize: createGame
+
+
+auth:
+  anonymous:
+    separator: "-"

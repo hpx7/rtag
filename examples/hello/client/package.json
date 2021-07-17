@@ -1,0 +1,11 @@
+{
+  "name": "hello-client",
+  "version": "0.0.1",
+  "type": "module",
+  "devDependencies": {
+    "typescript": "^4.1.3"
+  },
+  "scripts": {
+    "postinstall": "cd .rtag && npm install"
+  }
+}
